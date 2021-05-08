@@ -16,38 +16,43 @@ from src.components.errors import CustomError, build_err_obj
 users = Blueprint('users', __name__)
 
 
-@users.route("/test/test", methods=['GET', 'POST'])
-@token_required
-def testRoute(current_user):
-    data = request.get_json()
-    print('Gets here')
-    print(data)
-    return jsonify({'message': 'User routes now working'})
-
 # Get all users route
 @users.route('/users', methods=['GET'])
 def get_all_users():
-    all_users = User.query.all()
-    output = []
-    for user in all_users:
-        user_data = {'password': user.password, 'user_id': user.user_id, 'username': user.username, 'email': user.email}
-        output.append(user_data)
-    return jsonify({'users': output})
+    try:
+        all_users = User.query.all()
+        arr_of_users = []
+        for user in all_users:
+            user_data = {'user_id': user.user_id, 'username': user.username, 'email': user.email}
+            arr_of_users.append(user_data)
+        
+        # Build response
+        return build_res_obj("Users Fetched", 200, arr_of_users)
+    except Exception as err:
+        return build_err_obj(err, 404)
 
 
 # Get Single user
-@users.route('/users/<user_id>', methods=['GET'])
-@token_required
+@users.route('/users/single/<user_id>', methods=['GET'])
 def get_single_user(current_user, user_id):
-    user = User.query.filter_by(user_id=user_id).first()
+    try:
+        user = User.query.filter_by(user_id=user_id).first()
 
-    if not user:
-        return jsonify("msg: user not found")
+        if not user:
+            raise CustomError('User not found', 404)
 
-    user_data = {'user_id': user.user_id, 'username': user.username, 'email': user.email}
+        user_data = {
+            'user_id': user.user_id,
+            'username': user.username,
+            'email': user.email,
+            'image': user.image_file
+            }
 
-    return jsonify({'user': user_data})
+        # Build response
+        return build_res_obj("User account created", 200, user_data)
 
+    except Exception as err:
+        return build_err_obj(err, 404)
 
 # Sign Up route and function
 @users.route("/sign-up", methods=['POST'])
@@ -66,6 +71,7 @@ def sign_up():
         db.session.commit()
         # Build User obj
         user_obj = {
+            'user_id': user.user_id,
             "username": user.username,
             "email": user.email,
             "image": user.image_file
@@ -95,17 +101,17 @@ def sign_in():
         # swapped the auth.password for data['password']
         if check_password_hash(user.password, auth.password):
             token = jwt.encode({'user_id': user.user_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=60)},current_app.config['SECRET_KEY'])
-            print(type(token))
-                    # Build User obj
+
+            # Build token payload
             token_obj = {
-             'token': str(token, "UTF-8")
+             'token': str(token)
             }
             # Build response
             return  build_res_obj("User account created", 200, token_obj)
 
         return make_response('Could not verify', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
-    except Exception as e:
-        return build_err_obj(e, 404)
+    except Exception as err:
+        return build_err_obj(err, 404)
 
 
 # The logout route and function
@@ -114,38 +120,69 @@ def sign_out():
     logout_user()
     return redirect(url_for('main.home'))
 
-
-@users.route("/account", methods=['GET', 'POST'])
-@login_required
-def account():
-    form = UpdateAccountForm()
-    if form.validate_on_submit():
+@users.route("/users/update", methods=['GET','POST'])
+@token_required
+def update_account(current_user):
+    try:
+        form = UpdateAccountForm()
         if form.picture.data:
             picture_file = save_picture(form.picture.data)
             current_user.image_file = picture_file
         current_user.username = form.username.data
         current_user.email = form.email.data
         db.session.commit()
-        flash('Your account has been updated!', 'success')
-        return redirect(url_for('users.account'))
-    elif request.method == 'GET':
-        form.username.data = current_user.username
-        form.email.data = current_user.email
-    image_file = url_for('static', filename='img/' + current_user.image_file)
-    return render_template('account.html', title='Account',
-                           image_file=image_file, form=form)
 
+        # Build User obj
+        user_obj = {
+            'user_id': current_user.user_id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "image": current_user.image_file
+            }
 
-@users.route("/user/<string:username>")
+        # Build response
+        return build_res_obj("User account updated", 200, user_obj)
+    except Exception as err:
+        return build_err_obj(err, 404)
+
+# Get Current user
+@users.route('/users/current', methods=['GET'])
+@token_required
+def get_current_user(current_user):
+    try:
+        user_data = {
+            'user_id': current_user.user_id,
+            'username': current_user.username,
+            'email': current_user.email,
+            'image': current_user.image_file
+            }
+        # Build response
+        return build_res_obj("User account created", 200, user_data)
+
+    except Exception as err:
+        return build_err_obj(err, 404)
+        
+
+# Fetch user posts
+@users.route("/users/posts/<string:username>")
 def user_posts(username):
     page = request.args.get('page', 1, type=int)
     user = User.query.filter_by(username=username).first_or_404()
     posts = Post.query.filter_by(author=user) \
         .order_by(Post.date_posted.desc()) \
         .paginate(page=page, per_page=5)
-    return render_template('user_posts.html', posts=posts, user=user)
+    # Build User obj
+    post_payload = {
+            'user_id': user.user_id,
+            "username": user.username,
+            "email": user.email,
+            "image": user.image_file,
+            'posts': posts
+        }
+    # Build response
+    return build_res_obj("User account created", 200, post_payload)
 
-
+# Reset password
 @users.route("/reset_password", methods=['GET', 'POST'])
 def reset_request():
     if current_user.is_authenticated:
@@ -158,7 +195,7 @@ def reset_request():
         return redirect(url_for('users.sign_in'))
     return render_template('reset_request.html', title='Reset Password', form=form)
 
-
+#Password reset token
 @users.route("/reset_password/<token>", methods=['GET', 'POST'])
 def reset_token(token):
     if current_user.is_authenticated:
