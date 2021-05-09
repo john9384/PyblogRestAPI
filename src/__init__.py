@@ -27,18 +27,13 @@ def create_app(config_class=Config):
     mail.init_app(app)
 
     with app.app_context():
-        from src.components.main.routes import main
         from src.components.users.routes import users
         from src.components.posts.routes import posts
-        from src.components.errors.handlers import errors
+        
         db.create_all()  # Create sql tables for our data models
 
-    
 
-
-    app.register_blueprint(main)
     app.register_blueprint(users)
     app.register_blueprint(posts)
-    app.register_blueprint(errors)
 
     return app

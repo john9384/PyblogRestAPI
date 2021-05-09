@@ -104,7 +104,7 @@ def sign_in():
 
             # Build token payload
             token_obj = {
-             'token': str(token)
+             'token': str(token, 'UTF-8')
             }
             # Build response
             return  build_res_obj("User account created", 200, token_obj)

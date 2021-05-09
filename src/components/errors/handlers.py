@@ -1,21 +1,26 @@
-from flask import Blueprint, render_template
 from flask import jsonify
 
+class CustomError(Exception):
+    """
+    A Custom error class extending from the exeption
+    """
 
-errors = Blueprint('errors', __name__)
+    def __init__(self,message,status_code=None):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(self.message)
 
+    def __str__(self):
+        return f'{self.message}'
 
-@errors.app_errorhandler(403)
-def error_403(error):
-    return render_template('errors/403.html'), 403
+    def get_json(self):
+      return "Hello"
 
-
-@errors.app_errorhandler(404)
-def error_404(error):
-    return render_template('errors/404.html'), 404
-
-
-@errors.app_errorhandler(500)
-def error_500(error):
-    return render_template('errors/404.html'), 500
+def build_err_obj(message, status_code, payload=None):
+      err = {}
+      err['message'] = f'{message}'
+      err['payload']= payload
+      res = jsonify(err)
+      res.status_code = status_code
+      return res
 
